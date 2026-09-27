@@ -1,0 +1,167 @@
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 55a8450..3a21155 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -22,6 +22,22 @@[m [mThe program prints JSON, for example:[m
+ {"lines": 5, "words": 14, "characters": 88}[m
+ ```[m
+ [m
+[32m+[m[32mTo include the most frequent words, pass a non-negative number with `--top`:[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m```text[m[41m[m
+[32m+[m[32mpython src/text_stats.py sample.txt --top 2[m[41m[m
+[32m+[m[32m```[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mThis adds a `top_words` array to the JSON output. Words are compared[m[41m[m
+[32m+[m[32mcase-insensitively, and ties are ordered alphabetically:[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m```json[m[41m[m
+[32m+[m[32m"top_words": [[m[41m[m
+[32m+[m[32m  {"word": "fourth?", "count": 2},[m[41m[m
+[32m+[m[32m  {"word": "is", "count": 2}[m[41m[m
+[32m+[m[32m][m[41m[m
+[32m+[m[32m```[m[41m[m
+[32m+[m[41m[m
+ Characters include line-ending characters, and words are runs of non-whitespace[m
+ characters.[m
+ [m
+[1mdiff --git a/src/text_stats.py b/src/text_stats.py[m
+[1mindex de9447b..fe8e5de 100644[m
+[1m--- a/src/text_stats.py[m
+[1m+++ b/src/text_stats.py[m
+[36m@@ -4,22 +4,36 @@[m [mimport argparse[m
+ import json[m
+ import re[m
+ from pathlib import Path[m
+[31m-from typing import Dict[m
+[32m+[m[32mfrom typing import Dict, List, Optional, Union[m[41m[m
+ [m
+ [m
+[31m-def text_stats(text: str) -> Dict[str, int]:[m
+[32m+[m[32mdef text_stats(text: str, top: Optional[int] = None) -> Dict[str, Union[int, List[Dict[str, Union[str, int]]]]]:[m[41m[m
+     """Return line, word, and character counts for text."""[m
+[31m-    return {[m
+[32m+[m[32m    stats: Dict[str, Union[int, List[Dict[str, Union[str, int]]]]] = {[m[41m[m
+         "lines": len(text.splitlines()),[m
+         "words": len(re.findall(r"\S+", text)),[m
+         "characters": len(text),[m
+     }[m
+[31m-[m
+[31m-[m
+[31m-def file_stats(path: Path) -> Dict[str, int]:[m
+[32m+[m[32m    if top is not None:[m[41m[m
+[32m+[m[32m        word_counts: Dict[str, int] = {}[m[41m[m
+[32m+[m[32m        for word in re.findall(r"\S+", text):[m[41m[m
+[32m+[m[32m            normalized_word = word.casefold()[m[41m[m
+[32m+[m[32m            word_counts[normalized_word] = word_counts.get(normalized_word, 0) + 1[m[41m[m
+[32m+[m[32m        ranked_words = sorted([m[41m[m
+[32m+[m[32m            word_counts.items(), key=lambda item: (-item[1], item[0])[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[32m        stats["top_words"] = [[m[41m[m
+[32m+[m[32m            {"word": word, "count": count} for word, count in ranked_words[:top][m[41m[m
+[32m+[m[32m        ][m[41m[m
+[32m+[m[32m    return stats[m[41m[m
+[32m+[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mdef file_stats([m[41m[m
+[32m+[m[32m    path: Path, top: Optional[int] = None[m[41m[m
+[32m+[m[32m) -> Dict[str, Union[int, List[Dict[str, Union[str, int]]]]]:[m[41m[m
+     """Read a UTF-8 file and return its text statistics."""[m
+     with path.open("r", encoding="utf-8", newline="") as file:[m
+[31m-        return text_stats(file.read())[m
+[32m+[m[32m        return text_stats(file.read(), top=top)[m[41m[m
+ [m
+ [m
+ def main() -> None:[m
+[36m@@ -28,8 +42,16 @@[m [mdef main() -> None:[m
+         description="Count lines, words, and characters in a UTF-8 text file."[m
+     )[m
+     parser.add_argument("file", type=Path, help="path to the UTF-8 text file")[m
+[32m+[m[32m    parser.add_argument([m[41m[m
+[32m+[m[32m        "--top",[m[41m[m
+[32m+[m[32m        type=int,[m[41m[m
+[32m+[m[32m        metavar="N",[m[41m[m
+[32m+[m[32m        help="include the N most frequent words",[m[41m[m
+[32m+[m[32m    )[m[41m[m
+     args = parser.parse_args()[m
+[31m-    print(json.dumps(file_stats(args.file), ensure_ascii=False))[m
+[32m+[m[32m    if args.top is not None and args.top < 0:[m[41m[m
+[32m+[m[32m        parser.error("--top must be non-negative")[m[41m[m
+[32m+[m[32m    print(json.dumps(file_stats(args.file, top=args.top), ensure_ascii=False))[m[41m[m
+ [m
+ [m
+ if __name__ == "__main__":[m
+[1mdiff --git a/tests/test_text_stats.py b/tests/test_text_stats.py[m
+[1mindex fd1ad21..7e9c0dd 100644[m
+[1m--- a/tests/test_text_stats.py[m
+[1m+++ b/tests/test_text_stats.py[m
+[36m@@ -29,6 +29,27 @@[m [mclass TextStatsTests(unittest.TestCase):[m
+             {"lines": 0, "words": 0, "characters": 0},[m
+         )[m
+ [m
+[32m+[m[32m    def test_top_words_are_case_insensitive_and_deterministic(self) -> None:[m[41m[m
+[32m+[m[32m        self.assertEqual([m[41m[m
+[32m+[m[32m            text_stats("Beta alpha ALPHA beta gamma", top=3),[m[41m[m
+[32m+[m[32m            {[m[41m[m
+[32m+[m[32m                "lines": 1,[m[41m[m
+[32m+[m[32m                "words": 5,[m[41m[m
+[32m+[m[32m                "characters": 27,[m[41m[m
+[32m+[m[32m                "top_words": [[m[41m[m
+[32m+[m[32m                    {"word": "alpha", "count": 2},[m[41m[m
+[32m+[m[32m                    {"word": "beta", "count": 2},[m[41m[m
+[32m+[m[32m                    {"word": "gamma", "count": 1},[m[41m[m
+[32m+[m[32m                ],[m[41m[m
+[32m+[m[32m            },[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m    def test_top_zero_returns_no_words(self) -> None:[m[41m[m
+[32m+[m[32m        self.assertEqual([m[41m[m
+[32m+[m[32m            text_stats("one two", top=0)["top_words"],[m[41m[m
+[32m+[m[32m            [],[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[41m[m
+     def test_command_line_output_is_json(self) -> None:[m
+         result = subprocess.run([m
+             [sys.executable, str(ROOT / "src" / "text_stats.py"), str(ROOT / "sample.txt")],[m
+[36m@@ -41,6 +62,41 @@[m [mclass TextStatsTests(unittest.TestCase):[m
+             {"lines": 5, "words": 14, "characters": 88},[m
+         )[m
+ [m
+[32m+[m[32m    def test_command_line_top_words(self) -> None:[m[41m[m
+[32m+[m[32m        result = subprocess.run([m[41m[m
+[32m+[m[32m            [[m[41m[m
+[32m+[m[32m                sys.executable,[m[41m[m
+[32m+[m[32m                str(ROOT / "src" / "text_stats.py"),[m[41m[m
+[32m+[m[32m                str(ROOT / "sample.txt"),[m[41m[m
+[32m+[m[32m                "--top",[m[41m[m
+[32m+[m[32m                "2",[m[41m[m
+[32m+[m[32m            ],[m[41m[m
+[32m+[m[32m            capture_output=True,[m[41m[m
+[32m+[m[32m            check=True,[m[41m[m
+[32m+[m[32m            text=True,[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[32m        self.assertEqual([m[41m[m
+[32m+[m[32m            json.loads(result.stdout)["top_words"],[m[41m[m
+[32m+[m[32m            [[m[41m[m
+[32m+[m[32m                {"word": "fourth?", "count": 2},[m[41m[m
+[32m+[m[32m                {"word": "is", "count": 2},[m[41m[m
+[32m+[m[32m            ],[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m    def test_command_line_rejects_negative_top(self) -> None:[m[41m[m
+[32m+[m[32m        result = subprocess.run([m[41m[m
+[32m+[m[32m            [[m[41m[m
+[32m+[m[32m                sys.executable,[m[41m[m
+[32m+[m[32m                str(ROOT / "src" / "text_stats.py"),[m[41m[m
+[32m+[m[32m                str(ROOT / "sample.txt"),[m[41m[m
+[32m+[m[32m                "--top",[m[41m[m
+[32m+[m[32m                "-1",[m[41m[m
+[32m+[m[32m            ],[m[41m[m
+[32m+[m[32m            capture_output=True,[m[41m[m
+[32m+[m[32m            text=True,[m[41m[m
+[32m+[m[32m        )[m[41m[m
+[32m+[m[32m        self.assertNotEqual(result.returncode, 0)[m[41m[m
+[32m+[m[41m[m
+ [m
+ if __name__ == "__main__":[m
+     unittest.main()[m

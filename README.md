@@ -22,6 +22,22 @@ The program prints JSON, for example:
 {"lines": 5, "words": 14, "characters": 88}
 ```
 
+To include the most frequent words, pass a non-negative number with `--top`:
+
+```text
+python src/text_stats.py sample.txt --top 2
+```
+
+This adds a `top_words` array to the JSON output. Words are compared
+case-insensitively, and ties are ordered alphabetically:
+
+```json
+"top_words": [
+  {"word": "fourth?", "count": 2},
+  {"word": "is", "count": 2}
+]
+```
+
 Characters include line-ending characters, and words are runs of non-whitespace
 characters.
 
